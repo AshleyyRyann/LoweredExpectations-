@@ -1,0 +1,114 @@
+// Prisma schema for LoweredExpectations
+// SQLite is used for zero-setup local persistence; swap the datasource to
+// Postgres/MySQL for production without touching application code.
+//
+// Note: SQLite has no native enum support in Prisma, so fields that are
+// conceptually enums (gender, stiStatus, stiPreference, Interaction.action)
+// are plain Strings here. The allowed values are documented inline and
+// enforced by zod validation in the route layer — see src/lib/types.ts for
+// the shared literal-union types used throughout the app code.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  dateOfBirth  DateTime
+  /// One of: WOMAN | MAN | NONBINARY | OTHER
+  gender       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Location — plain lat/lng is enough for haversine distance matching.
+  locationLat  Float?
+  locationLng  Float?
+  locationCity String?
+
+  // Audio-first bio. This is the centerpiece of the app: a recorded
+  // "about me" clip that plays before any decision is made.
+  bioAudioUrl String?
+
+  // Additional photos are secondary/supplementary, stored as a JSON array
+  // of URLs (SQLite has no native array column).
+  photos String @default("[]")
+
+  // Interests as a JSON array of free-text tags. Kept denormalized for
+  // MVP simplicity; a join table would be the natural upgrade path.
+  interests String @default("[]")
+
+  // Who this user is interested in seeing, as a JSON array of gender
+  // strings (see the allowed values above).
+  preferredGenders String @default("[]")
+
+  minAgePreference Int @default(18)
+  maxAgePreference Int @default(99)
+  maxDistanceKm    Int @default(80)
+
+  // STI disclosure — shown on the profile with supportive framing to
+  // reduce stigma, not used to auto-exclude unless the viewer opts in
+  // via stiPreference.
+  /// One of: UNDISCLOSED | NEGATIVE | POSITIVE
+  stiStatus            String  @default("UNDISCLOSED")
+  stiDetails           String?
+  stiDisclosureVisible Boolean @default(true)
+  /// One of: NO_PREFERENCE | PREFER_NEGATIVE_ONLY
+  stiPreference        String  @default("NO_PREFERENCE")
+
+  sentInteractions     Interaction[] @relation("SentInteractions")
+  receivedInteractions Interaction[] @relation("ReceivedInteractions")
+  matchesAsA           Match[]       @relation("MatchUserA")
+  matchesAsB           Match[]       @relation("MatchUserB")
+  chatMessages         ChatMessage[]
+}
+
+// One user's decision after hearing another user's audio bio.
+model Interaction {
+  id         String @id @default(cuid())
+  fromUser   User   @relation("SentInteractions", fields: [fromUserId], references: [id])
+  fromUserId String
+  toUser     User   @relation("ReceivedInteractions", fields: [toUserId], references: [id])
+  toUserId   String
+  /// One of: PASS | GREETING | MESSAGE
+  action     String
+  // Free-text custom message, or the chosen predetermined greeting text.
+  messageText String?
+  createdAt   DateTime @default(now())
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId])
+}
+
+// Created once both users have sent a non-PASS interaction to each other.
+model Match {
+  id        String   @id @default(cuid())
+  userA     User     @relation("MatchUserA", fields: [userAId], references: [id])
+  userAId   String
+  userB     User     @relation("MatchUserB", fields: [userBId], references: [id])
+  userBId   String
+  createdAt DateTime @default(now())
+
+  messages ChatMessage[]
+
+  @@unique([userAId, userBId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  match     Match    @relation(fields: [matchId], references: [id])
+  matchId   String
+  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([matchId])
+}
