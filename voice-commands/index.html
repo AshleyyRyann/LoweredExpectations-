@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reverse Voice Commands</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --text: #1c1b19; --muted: #6b6862;
+    --border: #e2dfd8; --accent: #3b5bdb; --accent-text: #ffffff;
+    --dictation: #2b8a3e; --edit: #c2410c; --spell: #7048e8; --sleep: #868e96;
+    --log-bg: #faf9f7; --code-bg: #f0eee9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161614; --panel: #201f1d; --text: #ece9e3; --muted: #a19d95;
+      --border: #34322e; --accent: #748ffc; --accent-text: #0d0d0c;
+      --dictation: #69db7c; --edit: #ff922b; --spell: #b197fc; --sleep: #adb5bd;
+      --log-bg: #1b1a18; --code-bg: #2a2926;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+  button {
+    font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.listening { background: #e03131; border-color: #e03131; color: #fff; }
+  .mode {
+    margin-left: auto; font-weight: 700; letter-spacing: .04em; font-size: .85rem;
+    padding: 6px 12px; border-radius: 999px; color: #fff; text-transform: uppercase;
+  }
+  .mode[data-mode="dictation"] { background: var(--dictation); }
+  .mode[data-mode="edit"] { background: var(--edit); }
+  .mode[data-mode="spell"] { background: var(--spell); }
+  .mode[data-mode="sleep"] { background: var(--sleep); }
+  @media (prefers-color-scheme: dark) { .mode { color: #111; } }
+  textarea {
+    width: 100%; min-height: 260px; resize: vertical; font: 17px/1.6 ui-monospace, Menlo, Consolas, monospace;
+    background: var(--panel); color: var(--text); border: 2px solid var(--border); border-radius: 10px; padding: 12px;
+  }
+  textarea[data-mode="edit"] { border-color: var(--edit); }
+  textarea[data-mode="spell"] { border-color: var(--spell); }
+  textarea[data-mode="sleep"] { opacity: .6; }
+  .interim { min-height: 1.5em; color: var(--muted); font-style: italic; margin: 8px 0; overflow-wrap: anywhere; }
+  .sim { display: flex; gap: 8px; margin-top: 8px; }
+  .sim input {
+    flex: 1; min-width: 0; font: inherit; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 0; }
+  .log {
+    margin-top: 14px; background: var(--log-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; height: 150px; overflow: auto; font: 13px/1.5 ui-monospace, Menlo, monospace;
+  }
+  .log div { overflow-wrap: anywhere; }
+  .log .trigger { color: var(--edit); font-weight: 600; }
+  .log .mode { all: unset; color: var(--spell); font-weight: 600; }
+  .log .ignored { color: var(--muted); }
+  h2 { font-size: 1rem; margin: 0 0 8px; }
+  h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  td { padding: 4px 0; vertical-align: top; border-bottom: 1px solid var(--border); }
+  td:first-child { padding-right: 10px; white-space: nowrap; }
+  code { background: var(--code-bg); padding: 1px 6px; border-radius: 5px; font-weight: 700; }
+  .say { color: var(--muted); font-size: .8rem; display: block; }
+  .train { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .train select { font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); flex: 1; min-width: 0; }
+  .warn { background: #fff3bf; color: #5c4400; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none; }
+  @media (prefers-color-scheme: dark) { .warn { background: #3d3200; color: #ffe066; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Reverse Voice Commands</h1>
+  <p class="sub">Dictate normally. Say a word <strong>backwards</strong> to give a command, like <code>EDOMTIDE</code> ("edit mode" reversed) to turn your voice into a keyboard.</p>
+
+  <div class="warn" id="warn">Your browser doesn't support live speech recognition. Use Chrome or Edge, or test with the "Pretend I said" box below.</div>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="bar">
+        <button class="primary" id="mic">🎙 Start listening</button>
+        <button id="copy">Copy text</button>
+        <span class="mode" id="mode" data-mode="dictation">Dictation</span>
+      </div>
+      <textarea id="doc" data-mode="dictation" placeholder="Click Start listening and talk…"></textarea>
+      <div class="interim" id="interim"></div>
+      <form class="sim" id="sim">
+        <input id="simText" placeholder='Pretend I said… e.g. "hello world edom tide backspace three exit"' autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
+      <p class="hint">The "Pretend I said" box runs text through the same engine as the microphone, so you can test without speaking.</p>
+      <div class="log" id="log" aria-live="polite"></div>
+    </section>
+
+    <aside class="panel">
+      <h2>Cheat sheet</h2>
+      <h3>Dictation mode: backwards words</h3>
+      <table id="triggers"></table>
+
+      <h3>Edit mode: say it like a keyboard</h3>
+      <table id="editCmds"></table>
+      <p class="hint">Add a number for repeats: "backspace five", "left three". Say <code>exit</code> to go back to dictation.</p>
+
+      <h3>Spell mode</h3>
+      <p class="hint" style="margin-top:0">Say letters ("a", "bee") or NATO words ("alpha", "bravo"). "cap" capitalizes the next letter. "space", "backspace", <code>exit</code>.</p>
+
+      <h3>Teach it your voice</h3>
+      <p class="hint" style="margin-top:0">If a trigger isn't being caught, pick it, hit Train, and say it once. The app remembers how your speech engine spells it.</p>
+      <div class="train">
+        <select id="trainSel"></select>
+        <button id="trainBtn">Train</button>
+      </div>
+      <p class="hint" id="trainStatus"></p>
+    </aside>
+  </div>
+</main>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  const { Engine, TRIGGERS, EDIT_COMMANDS } = window.VoiceCommands;
+  const $ = (id) => document.getElementById(id);
+  const doc = $('doc'), modeEl = $('mode'), log = $('log'), interim = $('interim');
+
+  const ALIAS_KEY = 'reverse-voice-aliases';
+  let savedAliases = {};
+  try { savedAliases = JSON.parse(localStorage.getItem(ALIAS_KEY) || '{}'); } catch (e) {}
+
+  const MODE_LABEL = { dictation: 'Dictation', edit: 'Edit mode', spell: 'Spell mode', sleep: 'Paused' };
+
+  const engine = new Engine({
+    aliases: savedAliases,
+    onEvent(ev) {
+      if (ev.type === 'mode') addLog('mode', '→ ' + MODE_LABEL[ev.detail]);
+      else if (ev.type === 'trigger') addLog('trigger', ev.detail);
+      else if (ev.type === 'command') addLog('command', '⌨ ' + ev.detail);
+      else if (ev.type === 'ignored') addLog('ignored', ev.detail);
+    },
+  });
+
+  function addLog(cls, text) {
+    const d = document.createElement('div');
+    d.className = cls;
+    d.textContent = text;
+    log.appendChild(d);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function render() {
+    doc.value = engine.text;
+    doc.dataset.mode = engine.mode;
+    modeEl.dataset.mode = engine.mode;
+    modeEl.textContent = MODE_LABEL[engine.mode];
+    doc.focus({ preventScroll: true });
+    doc.setSelectionRange(engine.cursor, engine.selEnd);
+  }
+
+  // Keep the engine in sync if the user types or clicks in the box directly.
+  doc.addEventListener('input', () => { engine.snapshot(); engine.text = doc.value; engine.setCursor(doc.selectionStart); });
+  ['click', 'keyup'].forEach((e) => doc.addEventListener(e, () => { engine.cursor = doc.selectionStart; engine.selEnd = doc.selectionEnd; }));
+
+  let training = null;
+  function handleFinal(transcript) {
+    if (training) {
+      const key = engine.addAlias(training, transcript);
+      try { localStorage.setItem(ALIAS_KEY, JSON.stringify(engine.aliases)); } catch (e) {}
+      const t = TRIGGERS.find((x) => x.id === training);
+      $('trainStatus').textContent = `Learned: "${transcript}" now means ${t.word}.`;
+      addLog('trigger', `Trained ${t.word} ← "${transcript}" (${key})`);
+      training = null;
+      $('trainBtn').textContent = 'Train';
+      return;
+    }
+    addLog('heard', '🗣 "' + transcript + '"');
+    engine.process(transcript);
+    render();
+  }
+
+  // Cheat sheet
+  $('triggers').innerHTML = TRIGGERS.map((t) =>
+    `<tr><td><code>${t.word}</code><span class="say">say "${t.say}"</span></td><td>${t.desc}${t.id === 'sleep' ? ' (say again to wake)' : ''}</td></tr>`
+  ).join('');
+  $('editCmds').innerHTML = EDIT_COMMANDS.filter((c) => c.desc).map((c) =>
+    `<tr><td><code>${c.phrase.join(' ')}</code></td><td>${c.desc}</td></tr>`
+  ).join('');
+  $('trainSel').innerHTML = TRIGGERS.map((t) => `<option value="${t.id}">${t.word}</option>`).join('');
+
+  $('trainBtn').addEventListener('click', () => {
+    training = $('trainSel').value;
+    $('trainBtn').textContent = 'Say it now…';
+    $('trainStatus').textContent = 'Listening for one phrase. (Or type what you said in the "Pretend I said" box.)';
+    if (!listening && recognition) toggleMic();
+  });
+
+  $('sim').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = $('simText').value.trim();
+    if (v) handleFinal(v);
+    $('simText').value = '';
+  });
+
+  $('copy').addEventListener('click', () => {
+    navigator.clipboard && navigator.clipboard.writeText(engine.text).then(() => addLog('command', 'Copied to clipboard'));
+  });
+
+  // ---- Microphone (Web Speech API) ----
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null, listening = false;
+  if (!SR) {
+    $('warn').style.display = 'block';
+    $('mic').disabled = true;
+  } else {
+    recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.onresult = (ev) => {
+      let partial = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) handleFinal(r[0].transcript.trim());
+        else partial += r[0].transcript;
+      }
+      interim.textContent = partial;
+    };
+    recognition.onerror = (ev) => {
+      if (ev.error === 'not-allowed') { addLog('ignored', 'Microphone permission was denied.'); listening = false; updateMic(); }
+    };
+    // Browsers stop recognition after silence; restart while the user wants it on.
+    recognition.onend = () => { interim.textContent = ''; if (listening) try { recognition.start(); } catch (e) {} };
+  }
+
+  function updateMic() {
+    $('mic').textContent = listening ? '■ Stop listening' : '🎙 Start listening';
+    $('mic').classList.toggle('listening', listening);
+  }
+  function toggleMic() {
+    listening = !listening;
+    try { listening ? recognition.start() : recognition.stop(); } catch (e) {}
+    updateMic();
+  }
+  $('mic').addEventListener('click', toggleMic);
+
+  render();
+  addLog('ignored', 'Ready. Try: "hello world" then "edom tide", "backspace three", "exit".');
+})();
+</script>
+</body>
+</html>
